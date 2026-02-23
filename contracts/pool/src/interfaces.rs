@@ -19,6 +19,29 @@ pub trait PoolContractInterface {
         amount_in: i128,
     );
 
+    fn cancel_request(
+        e: Env,
+        operator: Address,
+        proxy_wallet: Address,
+        op_id: u128,
+        destination: Address,
+    );
+
+    fn terminate_request(
+        e: Env,
+        operator: Address,
+        op_id: u128,
+        destination: Address,
+    );
+
+    fn withdraw_token(
+        e: Env,
+        operator: Address,
+        destination: Address,
+        token: Address,
+        amount: i128,
+    );
+
     fn swap_chained_via_router(
         e: Env,
         operator: Address,

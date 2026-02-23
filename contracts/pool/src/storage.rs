@@ -9,6 +9,7 @@ use utils::{
     generate_instance_storage_getter_with_default, generate_instance_storage_setter,
 };
 
+
 #[derive(Clone)]
 #[contracttype]
 enum DataKey {
@@ -91,6 +92,18 @@ pub fn add_swap_request(e: &Env, destination: &Address, value: &SwapRequest) {
     let mut requests = get_active_swap_requests(e, destination);
     mark_operation_id_consumed(&e, value.op_id);
     requests.push_back(value.clone());
+    set_active_swap_requests(e, destination, &requests);
+}
+
+pub fn cancel_swap_request(e: &Env, destination: &Address, value: &SwapRequest) {
+    mark_operation_id_not_consumed(&e, value.op_id);
+
+    let mut requests = get_active_swap_requests(e, destination);
+    if let Some(pos) = requests.iter().position(|x| x.op_id == value.op_id) {
+        let pos_u32: u32 = u32::try_from(pos).expect("Value doesn't fit into u32");
+        requests.remove(pos_u32);
+    }
+
     set_active_swap_requests(e, destination, &requests);
 }
 
@@ -227,5 +240,11 @@ pub fn get_operation_id_consumed(e: &Env, op_id: u128) -> bool {
 fn mark_operation_id_consumed(e: &Env, op_id: u128) {
     let key = DataKey::OperationIdConsumed(op_id);
     e.storage().persistent().set(&key, &true);
+    bump_persistent(e, &key);
+}
+
+fn mark_operation_id_not_consumed(e: &Env, op_id: u128) {
+    let key = DataKey::OperationIdConsumed(op_id);
+    e.storage().persistent().set(&key, &false);
     bump_persistent(e, &key);
 }

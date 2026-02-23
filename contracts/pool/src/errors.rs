@@ -9,4 +9,6 @@ pub enum PoolError {
     OperationIdAlreadyConsumed = 2300,
     SwapNotPerformed = 2301,
     UnauthorizedOperator = 2302,
+    OperationIdNotConsumed = 2303,
+    FeeExceedSwapAmount = 2304,
 }

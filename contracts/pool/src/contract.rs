@@ -1,6 +1,5 @@
 use soroban_sdk::token::TokenClient as SorobanTokenClient;
 use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, Vec};
-
 use access_control::access::{AccessControl, AccessControlTrait};
 
 use crate::errors::PoolError;
@@ -8,7 +7,7 @@ use crate::interfaces::{PoolContractInterface, UpgradeableContract};
 use crate::swap_router::swap_with_router;
 
 use crate::storage::{
-    add_swap_request, get_active_swap_requests, get_completed_swap_requests_last_page,
+    add_swap_request, cancel_swap_request, get_active_swap_requests, get_completed_swap_requests_last_page,
     get_completed_swap_requests_page, get_destinations, get_destinations_last_page,
     get_operation_id_consumed, get_operational_fee, get_operator, get_swap_request_by_id,
     get_swap_router, get_token_in, set_operational_fee, set_operator, set_swap_request_processed,
@@ -81,6 +80,11 @@ impl PoolContractInterface for PoolContract {
         );
 
         let operational_fee = get_operational_fee(&e);
+
+        if operational_fee >= amount_in {
+            panic_with_error!(&e, PoolError::FeeExceedSwapAmount);
+        }
+
         if operational_fee > 0 {
             token_in_client.transfer(&e.current_contract_address(), &operator, &operational_fee);
         }
@@ -95,6 +99,92 @@ impl PoolContractInterface for PoolContract {
                 amount_in: amount_in - operational_fee,
                 token_out,
             },
+        );
+
+        // todo: emit event
+    }
+
+    fn withdraw_token(
+        e: Env,
+        operator: Address,
+        destination: Address,
+        token: Address,
+        amount: i128,
+    ) {
+        // check operator is whitelisted
+        operator.require_auth();
+        if operator != get_operator(&e) {
+            panic_with_error!(&e, PoolError::UnauthorizedOperator);
+        }
+
+        // return money to proxy wallet
+        SorobanTokenClient::new(&e, &
+            token).transfer(
+            &e.current_contract_address(),
+            &destination,
+            &amount,
+        );
+    }
+
+    fn cancel_request(
+        e: Env,
+        operator: Address,
+        proxy_wallet: Address,
+        op_id: u128,
+        destination: Address,
+    ) {
+        // check operator is whitelisted
+        operator.require_auth();
+        if operator != get_operator(&e) {
+            panic_with_error!(&e, PoolError::UnauthorizedOperator);
+        }
+
+        // check if operation id consumed
+        if !get_operation_id_consumed(&e, op_id) {
+            panic_with_error!(&e, PoolError::OperationIdNotConsumed);
+        }
+
+        let swap_request = get_swap_request_by_id(&e, &destination, op_id);
+
+        // return money to proxy wallet
+        SorobanTokenClient::new(&e, &get_token_in(&e)).transfer(
+            &e.current_contract_address(),
+            &proxy_wallet,
+            &swap_request.amount_in,
+        );
+
+        cancel_swap_request(
+            &e,
+            &destination,
+            &swap_request,
+        );
+
+        // todo: emit event
+    }
+
+    fn terminate_request(
+        e: Env,
+        operator: Address,
+        op_id: u128,
+        destination: Address,
+    ) {
+        // check operator is whitelisted
+        operator.require_auth();
+        if operator != get_operator(&e) {
+            panic_with_error!(&e, PoolError::UnauthorizedOperator);
+        }
+
+        // check if operation id consumed
+        if !get_operation_id_consumed(&e, op_id) {
+            panic_with_error!(&e, PoolError::OperationIdNotConsumed);
+        }
+
+        let swap_request = get_swap_request_by_id(&e, &destination, op_id);
+
+        cancel_swap_request(
+            &e,
+            &destination,
+            &swap_request,
         );
 
         // todo: emit event
