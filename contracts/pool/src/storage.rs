@@ -15,6 +15,9 @@ use utils::{
 enum DataKey {
     Operator,
     OperationalFee,
+    MinOperationalFee,
+    MaxOperationalFee,
+    PercentOperationalFee,
     SwapRouter,
     TokenIn,
     SwapRequests(Address),
@@ -58,6 +61,24 @@ generate_instance_storage_getter_and_setter_with_default!(
 generate_instance_storage_getter_and_setter_with_default!(
     operational_fee,
     DataKey::OperationalFee,
+    i128,
+    0
+);
+generate_instance_storage_getter_and_setter_with_default!(
+    min_operational_fee,
+    DataKey::MinOperationalFee,
+    i128,
+    0
+);
+generate_instance_storage_getter_and_setter_with_default!(
+    max_operational_fee,
+    DataKey::MaxOperationalFee,
+    i128,
+    0
+);
+generate_instance_storage_getter_and_setter_with_default!(
+    percent_operational_fee,
+    DataKey::PercentOperationalFee,
     i128,
     0
 );

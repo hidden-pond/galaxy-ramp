@@ -64,6 +64,13 @@ fn test_chained_swap() {
     let proxy_wallet = Address::generate(&e);
     let operator = Address::generate(&e);
     let destination = Address::generate(&e);
+    let min_fee = 50;
+    let max_fee = 150;
+    let percent_fee = 100;
+
+    let expected_fee_amount = 50;
+    let pool_fee_amount = 2;
+    let swap_amount = 142;
 
     let mut tokens = std::vec![
         create_token_contract(&e, &admin).address,
@@ -136,7 +143,7 @@ fn test_chained_swap() {
     swap_pool.mock_all_auths().set_token_in(&admin, &tokens[0]);
     swap_pool
         .mock_all_auths()
-        .set_operational_fee(&operator, &42);
+        .set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
 
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
@@ -156,7 +163,7 @@ fn test_chained_swap() {
             (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
         ],
     );
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &142);
+    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -180,7 +187,7 @@ fn test_chained_swap() {
                         BytesN::from_array(&e, &[0; 32]).into_val(&e),
                         operation_id.into_val(&e),
                         destination.to_val(),
-                        142_i128.into_val(&e),
+                        swap_amount.into_val(&e),
                     ],
                 )
                 .into_val(&e),
@@ -194,7 +201,7 @@ fn test_chained_swap() {
             &BytesN::from_array(&e, &[0; 32]),
             &operation_id,
             &destination,
-            &142,
+            &swap_amount,
         );
 
     // check storage
@@ -206,12 +213,12 @@ fn test_chained_swap() {
                 BytesN::from_array(&e, &[0; 32]),
                 operation_id,
                 destination.clone(),
-                100,
+                swap_amount - expected_fee_amount,
                 tokens[2].clone(),
             ),]
         )
     );
-    assert_eq!(token1.balance(&operator), 42);
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
     assert_eq!(
         swap_pool.get_completed_requests(&destination, &0),
@@ -236,15 +243,18 @@ fn test_chained_swap() {
                         destination.to_val(),
                         operation_id.into_val(&e),
                         swaps_chain.to_val(),
-                        95_i128.into_val(&e),
+                        (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
                     ],
                 )
                 .into_val(&e),
                 sub_invokes: &[],
             },
         }])
-        .swap_chained_via_router(&operator, &destination, &operation_id, &swaps_chain, &95);
-    assert_eq!(amount_out, 96);
+        .swap_chained_via_router(
+            &operator, &destination, &operation_id, &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+        );
+    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
     assert_eq!(
         e.auths(),
         std::vec![(
@@ -260,7 +270,7 @@ fn test_chained_swap() {
                             destination.to_val(),
                             operation_id.into_val(&e),
                             swaps_chain.to_val(),
-                            95_i128.into_val(&e),
+                            (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
                         ]
                     )
                 )),
@@ -270,7 +280,7 @@ fn test_chained_swap() {
     );
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
-    assert_eq!(token3.balance(&destination), 96);
+    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
 
     // check storage
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
@@ -283,9 +293,9 @@ fn test_chained_swap() {
                 BytesN::from_array(&e, &[0; 32]),
                 operation_id,
                 destination.clone(),
-                100,
+                swap_amount - expected_fee_amount,
                 tokens[2].clone(),
-                96,
+                (swap_amount - expected_fee_amount - pool_fee_amount * 2),
             ),]
         )
     );
@@ -306,6 +316,14 @@ fn test_duplicate_destination() {
     let proxy_wallet = Address::generate(&e);
     let operator = Address::generate(&e);
     let destination = Address::generate(&e);
+
+    let min_fee = 50;
+    let max_fee = 150;
+    let percent_fee = 100;
+    let swap_amount = 100;
+    let pool_fee_amount = 2;
+
+    let expected_fee_amount = 50;
 
     let mut tokens = std::vec![
         create_token_contract(&e, &admin).address,
@@ -353,7 +371,7 @@ fn test_duplicate_destination() {
     swap_pool.set_operator(&admin, &operator);
     swap_pool.set_swap_router(&admin, &router.address);
     swap_pool.set_token_in(&admin, &tokens[0]);
-    swap_pool.set_operational_fee(&operator, &0);
+    swap_pool.set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
 
     // approve tokens for proxy wallet & then lock it
     token1.approve(&proxy_wallet, &swap_pool.address, &i128::MAX, &9999);
@@ -375,9 +393,12 @@ fn test_duplicate_destination() {
         &BytesN::from_array(&e, &[0; 32]),
         &operation_id,
         &destination,
-        &100,
+        &swap_amount,
     );
-    swap_pool.swap_chained_via_router(&operator, &destination, &operation_id, &swaps_chain, &90);
+    swap_pool.swap_chained_via_router(
+        &operator, &destination, &operation_id, &swaps_chain,
+        &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
 
     operation_id += 1;
     swap_pool.add_request(
@@ -387,9 +408,12 @@ fn test_duplicate_destination() {
         &BytesN::from_array(&e, &[0; 32]),
         &operation_id,
         &destination,
-        &100,
+        &swap_amount,
     );
-    swap_pool.swap_chained_via_router(&operator, &destination, &operation_id, &swaps_chain, &90);
+    swap_pool.swap_chained_via_router(
+        &operator, &destination, &operation_id, &swaps_chain,
+        &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
 
     // check storage
     assert_eq!(swap_pool.get_destinations_last_page(), 0);
@@ -409,7 +433,13 @@ fn test_request_cancel() {
     let proxy_wallet = Address::generate(&e);
     let operator = Address::generate(&e);
     let destination = Address::generate(&e);
-    let fee_amount = 42;
+    
+    let min_fee = 50;
+    let max_fee = 150;
+    let percent_fee = 100;
+
+    let expected_fee_amount = 50;
+    let swap_amount = 142;
 
     let mut tokens = std::vec![
         create_token_contract(&e, &admin).address,
@@ -482,7 +512,7 @@ fn test_request_cancel() {
     swap_pool.mock_all_auths().set_token_in(&admin, &tokens[0]);
     swap_pool
         .mock_all_auths()
-        .set_operational_fee(&operator, &fee_amount);
+        .set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
 
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
@@ -496,7 +526,7 @@ fn test_request_cancel() {
     // init swap
     let operation_id = 1;
 
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &142);
+    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -520,7 +550,7 @@ fn test_request_cancel() {
                         BytesN::from_array(&e, &[0; 32]).into_val(&e),
                         operation_id.into_val(&e),
                         destination.to_val(),
-                        142_i128.into_val(&e),
+                        swap_amount.into_val(&e),
                     ],
                 )
                 .into_val(&e),
@@ -534,7 +564,7 @@ fn test_request_cancel() {
             &BytesN::from_array(&e, &[0; 32]),
             &operation_id,
             &destination,
-            &142,
+            &swap_amount,
         );
 
     // check storage
@@ -546,12 +576,12 @@ fn test_request_cancel() {
                 BytesN::from_array(&e, &[0; 32]),
                 operation_id,
                 destination.clone(),
-                100,
+                swap_amount - expected_fee_amount,
                 tokens[2].clone(),
             ),]
         )
     );
-    assert_eq!(token1.balance(&operator), 42);
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
     assert_eq!(
         swap_pool.get_completed_requests(&destination, &0),
@@ -588,7 +618,7 @@ fn test_request_cancel() {
             &operation_id,
             &destination,
         );
-    assert_eq!(token1.balance(&proxy_wallet), 142 - fee_amount);
+    assert_eq!(token1.balance(&proxy_wallet), swap_amount - expected_fee_amount);
     assert_eq!(token2.balance(&destination), 0);
     assert_eq!(token3.balance(&destination), 0);
 
@@ -617,8 +647,13 @@ fn test_request_terminate() {
     let proxy_wallet = Address::generate(&e);
     let operator = Address::generate(&e);
     let destination = Address::generate(&e);
-    let fee_amount = 42;
     let swap_amount = 142;
+
+    let min_fee = 50;
+    let max_fee = 150;
+    let percent_fee = 100;
+
+    let expected_fee_amount = 50;
 
     let mut tokens = std::vec![
         create_token_contract(&e, &admin).address,
@@ -691,7 +726,7 @@ fn test_request_terminate() {
     swap_pool.mock_all_auths().set_token_in(&admin, &tokens[0]);
     swap_pool
         .mock_all_auths()
-        .set_operational_fee(&operator, &fee_amount);
+        .set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
 
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
@@ -755,12 +790,12 @@ fn test_request_terminate() {
                 BytesN::from_array(&e, &[0; 32]),
                 operation_id,
                 destination.clone(),
-                100,
+                swap_amount - expected_fee_amount,
                 tokens[2].clone(),
             ),]
         )
     );
-    assert_eq!(token1.balance(&operator), 42);
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
     assert_eq!(
         swap_pool.get_completed_requests(&destination, &0),
@@ -772,7 +807,7 @@ fn test_request_terminate() {
         vec![&e, destination.clone()]
     );
 
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - fee_amount);
+    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
     swap_pool
         .mock_auths(&[MockAuth {
             address: &operator,
@@ -797,8 +832,8 @@ fn test_request_terminate() {
             &destination,
         );
     assert_eq!(token1.balance(&proxy_wallet), 0);
-    assert_eq!(token1.balance(&operator), fee_amount);
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - fee_amount);
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
     assert_eq!(token2.balance(&destination), 0);
     assert_eq!(token3.balance(&destination), 0);
 
@@ -828,8 +863,12 @@ fn test_request_terminate_and_withdraw() {
     let proxy_wallet = Address::generate(&e);
     let operator = Address::generate(&e);
     let destination = Address::generate(&e);
-    let fee_amount = 42;
+    let expected_fee_amount = 50;
     let swap_amount = 142;
+
+    let min_fee = 50;
+    let max_fee = 150;
+    let percent_fee = 100;
 
     let mut tokens = std::vec![
         create_token_contract(&e, &admin).address,
@@ -874,21 +913,21 @@ fn test_request_terminate_and_withdraw() {
     let (pool_index2, _pool_address2) = router
         .mock_all_auths()
         .init_standard_pool(&admin, &tokens2, &30);
-    token1_admin.mock_all_auths().mint(&admin, &10000);
-    token2_admin.mock_all_auths().mint(&admin, &20000);
-    token3_admin.mock_all_auths().mint(&admin, &10000);
+    token1_admin.mock_all_auths().mint(&admin, &10000000);
+    token2_admin.mock_all_auths().mint(&admin, &20000000);
+    token3_admin.mock_all_auths().mint(&admin, &10000000);
     router.mock_all_auths().deposit(
         &admin,
         &tokens1,
         &pool_index1,
-        &Vec::from_array(&e, [10000, 10000]),
+        &Vec::from_array(&e, [10000000, 10000000]),
         &0,
     );
     router.mock_all_auths().deposit(
         &admin,
         &tokens2,
         &pool_index2,
-        &Vec::from_array(&e, [10000, 10000]),
+        &Vec::from_array(&e, [10000000, 10000000]),
         &0,
     );
 
@@ -902,7 +941,7 @@ fn test_request_terminate_and_withdraw() {
     swap_pool.mock_all_auths().set_token_in(&admin, &tokens[0]);
     swap_pool
         .mock_all_auths()
-        .set_operational_fee(&operator, &fee_amount);
+        .set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
 
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
@@ -966,12 +1005,12 @@ fn test_request_terminate_and_withdraw() {
                 BytesN::from_array(&e, &[0; 32]),
                 operation_id,
                 destination.clone(),
-                100,
+                swap_amount - expected_fee_amount,
                 tokens[2].clone(),
             ),]
         )
     );
-    assert_eq!(token1.balance(&operator), 42);
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
     assert_eq!(
         swap_pool.get_completed_requests(&destination, &0),
@@ -983,7 +1022,7 @@ fn test_request_terminate_and_withdraw() {
         vec![&e, destination.clone()]
     );
 
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - fee_amount);
+    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
     swap_pool
         .mock_auths(&[MockAuth {
             address: &operator,
@@ -1008,8 +1047,8 @@ fn test_request_terminate_and_withdraw() {
             &destination,
         );
     assert_eq!(token1.balance(&proxy_wallet), 0);
-    assert_eq!(token1.balance(&operator), fee_amount);
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - fee_amount);
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
     assert_eq!(token2.balance(&destination), 0);
     assert_eq!(token3.balance(&destination), 0);
 
@@ -1040,7 +1079,7 @@ fn test_request_terminate_and_withdraw() {
                         operator.to_val(),
                         destination.to_val(),
                         token1.address.to_val(),
-                        (swap_amount - fee_amount).into_val(&e),
+                        (swap_amount - expected_fee_amount).into_val(&e),
                     ],
                 )
                 .into_val(&e),
@@ -1051,11 +1090,768 @@ fn test_request_terminate_and_withdraw() {
             &operator,
             &destination,
             &token1.address,
-            &(swap_amount - fee_amount),
+            &(swap_amount - expected_fee_amount),
         );
-    assert_eq!(token1.balance(&destination), swap_amount - fee_amount);
-    assert_eq!(token1.balance(&operator), fee_amount);
+    assert_eq!(token1.balance(&destination), swap_amount - expected_fee_amount);
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(token1.balance(&swap_pool.address), 0);
     assert_eq!(token2.balance(&destination), 0);
     assert_eq!(token3.balance(&destination), 0);
+}
+
+#[test]
+fn test_chained_swap_max_fee_threshold() {
+    let e = Env::default();
+    e.budget().reset_unlimited();
+
+    let admin = Address::generate(&e);
+    let proxy_wallet = Address::generate(&e);
+    let operator = Address::generate(&e);
+    let destination = Address::generate(&e);
+    let min_fee = 1;
+    let max_fee = 5;
+    let percent_fee = 100;
+
+    let expected_fee_amount = 5;
+    let pool_fee_amount = 86;
+    let swap_amount = 1000;
+
+    let mut tokens = std::vec![
+        create_token_contract(&e, &admin).address,
+        create_token_contract(&e, &admin).address,
+        create_token_contract(&e, &admin).address
+    ];
+    tokens.sort();
+    let token1 = SorobanTokenClient::new(&e, &tokens[0]);
+    let token2 = SorobanTokenClient::new(&e, &tokens[1]);
+    let token3 = SorobanTokenClient::new(&e, &tokens[2]);
+    let token1_admin = SorobanTokenAdminClient::new(&e, &tokens[0]);
+    let token2_admin = SorobanTokenAdminClient::new(&e, &tokens[1]);
+    let token3_admin = SorobanTokenAdminClient::new(&e, &tokens[2]);
+
+    let tokens1 = Vec::from_array(&e, [tokens[0].clone(), tokens[1].clone()]);
+    let tokens2 = Vec::from_array(&e, [tokens[1].clone(), tokens[2].clone()]);
+
+    // init swap router with all it's complexity
+    let pool_hash = install_liq_pool_hash(&e);
+    let token_hash = install_token_wasm(&e);
+    let plane = deploy_plane_contract(&e);
+    let swap_router = deploy_swap_calculator_contract(&e);
+    swap_router.init_admin(&admin);
+    swap_router.mock_all_auths().set_pools_plane(&admin, &plane);
+    let router = deploy_liqpool_router_contract(&e);
+    router.mock_all_auths().init_admin(&admin);
+    router.mock_all_auths().set_pool_hash(&pool_hash);
+    router
+        .mock_all_auths()
+        .set_stableswap_pool_hash(&install_stableswap_liq_pool_hash(&e));
+    router.mock_all_auths().set_token_hash(&token_hash);
+    router.mock_all_auths().set_reward_token(&token1.address);
+    router.mock_all_auths().set_pools_plane(&admin, &plane);
+    router
+        .mock_all_auths()
+        .set_swap_router(&admin, &swap_router.address);
+
+    // init pools & deposit
+    let (pool_index1, _pool_address1) = router
+        .mock_all_auths()
+        .init_standard_pool(&admin, &tokens1, &30);
+    let (pool_index2, _pool_address2) = router
+        .mock_all_auths()
+        .init_standard_pool(&admin, &tokens2, &30);
+    token1_admin.mock_all_auths().mint(&admin, &10000);
+    token2_admin.mock_all_auths().mint(&admin, &20000);
+    token3_admin.mock_all_auths().mint(&admin, &10000);
+    router.mock_all_auths().deposit(
+        &admin,
+        &tokens1,
+        &pool_index1,
+        &Vec::from_array(&e, [10000, 10000]),
+        &0,
+    );
+    router.mock_all_auths().deposit(
+        &admin,
+        &tokens2,
+        &pool_index2,
+        &Vec::from_array(&e, [10000, 10000]),
+        &0,
+    );
+
+    // init current contract
+    let swap_pool = deploy_swap_pool(&e);
+    swap_pool.mock_all_auths().set_admin(&admin);
+    swap_pool.mock_all_auths().set_operator(&admin, &operator);
+    swap_pool
+        .mock_all_auths()
+        .set_swap_router(&admin, &router.address);
+    swap_pool.mock_all_auths().set_token_in(&admin, &tokens[0]);
+    swap_pool
+        .mock_all_auths()
+        .set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
+
+    assert_eq!(token1.balance(&destination), 0);
+    assert_eq!(token2.balance(&destination), 0);
+    assert_eq!(token3.balance(&destination), 0);
+
+    // approve tokens for proxy wallet & then lock it
+    token1
+        .mock_all_auths()
+        .approve(&proxy_wallet, &swap_pool.address, &i128::MAX, &9999);
+
+    // init swap
+    let operation_id = 1;
+    let swaps_chain = Vec::from_array(
+        &e,
+        [
+            (tokens1.clone(), pool_index1.clone(), tokens[1].clone()),
+            (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
+        ],
+    );
+    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+
+    assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::new(&e)
+    );
+    assert_eq!(swap_pool.get_destinations(&0), Vec::new(&e));
+
+    swap_pool
+        .mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &swap_pool.address,
+                fn_name: "add_request",
+                args: Vec::from_array(
+                    &e,
+                    [
+                        operator.to_val(),
+                        proxy_wallet.to_val(),
+                        tokens[2].clone().to_val(),
+                        BytesN::from_array(&e, &[0; 32]).into_val(&e),
+                        operation_id.into_val(&e),
+                        destination.to_val(),
+                        swap_amount.into_val(&e),
+                    ],
+                )
+                .into_val(&e),
+                sub_invokes: &[],
+            },
+        }])
+        .add_request(
+            &operator,
+            &proxy_wallet,
+            &tokens[2],
+            &BytesN::from_array(&e, &[0; 32]),
+            &operation_id,
+            &destination,
+            &swap_amount,
+        );
+
+    // check storage
+    assert_eq!(
+        swap_pool.get_requests(&destination),
+        Vec::from_array(
+            &e,
+            [(
+                BytesN::from_array(&e, &[0; 32]),
+                operation_id,
+                destination.clone(),
+                swap_amount - expected_fee_amount,
+                tokens[2].clone(),
+            ),]
+        )
+    );
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::new(&e)
+    );
+    assert_eq!(swap_pool.get_destinations_last_page(), 0);
+    assert_eq!(
+        swap_pool.get_destinations(&0),
+        vec![&e, destination.clone()]
+    );
+
+    let amount_out = swap_pool
+        .mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &swap_pool.address,
+                fn_name: "swap_chained_via_router",
+                args: Vec::from_array(
+                    &e,
+                    [
+                        operator.to_val(),
+                        destination.to_val(),
+                        operation_id.into_val(&e),
+                        swaps_chain.to_val(),
+                        (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
+                    ],
+                )
+                .into_val(&e),
+                sub_invokes: &[],
+            },
+        }])
+        .swap_chained_via_router(
+            &operator, &destination, &operation_id, &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+        );
+    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        e.auths(),
+        std::vec![(
+            operator.clone(),
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((
+                    swap_pool.address.clone(),
+                    Symbol::new(&e, "swap_chained_via_router"),
+                    Vec::from_array(
+                        &e,
+                        [
+                            operator.to_val(),
+                            destination.to_val(),
+                            operation_id.into_val(&e),
+                            swaps_chain.to_val(),
+                            (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
+                        ]
+                    )
+                )),
+                sub_invocations: std::vec![],
+            }
+        ),]
+    );
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(token1.balance(&destination), 0);
+    assert_eq!(token2.balance(&destination), 0);
+    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+
+    // check storage
+    assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
+    assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::from_array(
+            &e,
+            [(
+                BytesN::from_array(&e, &[0; 32]),
+                operation_id,
+                destination.clone(),
+                swap_amount - expected_fee_amount,
+                tokens[2].clone(),
+                (swap_amount - expected_fee_amount - pool_fee_amount * 2),
+            ),]
+        )
+    );
+    assert_eq!(swap_pool.get_destinations_last_page(), 0);
+    assert_eq!(
+        swap_pool.get_destinations(&0),
+        vec![&e, destination.clone()]
+    );
+}
+
+#[test]
+fn test_chained_swap_min_fee_threshold() {
+    let e = Env::default();
+    e.budget().reset_unlimited();
+
+    let admin = Address::generate(&e);
+    let proxy_wallet = Address::generate(&e);
+    let operator = Address::generate(&e);
+    let destination = Address::generate(&e);
+    let min_fee = 50;
+    let max_fee = 100;
+    let percent_fee = 100;
+
+    let expected_fee_amount = 50;
+    let pool_fee_amount = 79;
+    let swap_amount = 1000;
+
+    let mut tokens = std::vec![
+        create_token_contract(&e, &admin).address,
+        create_token_contract(&e, &admin).address,
+        create_token_contract(&e, &admin).address
+    ];
+    tokens.sort();
+    let token1 = SorobanTokenClient::new(&e, &tokens[0]);
+    let token2 = SorobanTokenClient::new(&e, &tokens[1]);
+    let token3 = SorobanTokenClient::new(&e, &tokens[2]);
+    let token1_admin = SorobanTokenAdminClient::new(&e, &tokens[0]);
+    let token2_admin = SorobanTokenAdminClient::new(&e, &tokens[1]);
+    let token3_admin = SorobanTokenAdminClient::new(&e, &tokens[2]);
+
+    let tokens1 = Vec::from_array(&e, [tokens[0].clone(), tokens[1].clone()]);
+    let tokens2 = Vec::from_array(&e, [tokens[1].clone(), tokens[2].clone()]);
+
+    // init swap router with all it's complexity
+    let pool_hash = install_liq_pool_hash(&e);
+    let token_hash = install_token_wasm(&e);
+    let plane = deploy_plane_contract(&e);
+    let swap_router = deploy_swap_calculator_contract(&e);
+    swap_router.init_admin(&admin);
+    swap_router.mock_all_auths().set_pools_plane(&admin, &plane);
+    let router = deploy_liqpool_router_contract(&e);
+    router.mock_all_auths().init_admin(&admin);
+    router.mock_all_auths().set_pool_hash(&pool_hash);
+    router
+        .mock_all_auths()
+        .set_stableswap_pool_hash(&install_stableswap_liq_pool_hash(&e));
+    router.mock_all_auths().set_token_hash(&token_hash);
+    router.mock_all_auths().set_reward_token(&token1.address);
+    router.mock_all_auths().set_pools_plane(&admin, &plane);
+    router
+        .mock_all_auths()
+        .set_swap_router(&admin, &swap_router.address);
+
+    // init pools & deposit
+    let (pool_index1, _pool_address1) = router
+        .mock_all_auths()
+        .init_standard_pool(&admin, &tokens1, &30);
+    let (pool_index2, _pool_address2) = router
+        .mock_all_auths()
+        .init_standard_pool(&admin, &tokens2, &30);
+    token1_admin.mock_all_auths().mint(&admin, &10000);
+    token2_admin.mock_all_auths().mint(&admin, &20000);
+    token3_admin.mock_all_auths().mint(&admin, &10000);
+    router.mock_all_auths().deposit(
+        &admin,
+        &tokens1,
+        &pool_index1,
+        &Vec::from_array(&e, [10000, 10000]),
+        &0,
+    );
+    router.mock_all_auths().deposit(
+        &admin,
+        &tokens2,
+        &pool_index2,
+        &Vec::from_array(&e, [10000, 10000]),
+        &0,
+    );
+
+    // init current contract
+    let swap_pool = deploy_swap_pool(&e);
+    swap_pool.mock_all_auths().set_admin(&admin);
+    swap_pool.mock_all_auths().set_operator(&admin, &operator);
+    swap_pool
+        .mock_all_auths()
+        .set_swap_router(&admin, &router.address);
+    swap_pool.mock_all_auths().set_token_in(&admin, &tokens[0]);
+    swap_pool
+        .mock_all_auths()
+        .set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
+
+    assert_eq!(token1.balance(&destination), 0);
+    assert_eq!(token2.balance(&destination), 0);
+    assert_eq!(token3.balance(&destination), 0);
+
+    // approve tokens for proxy wallet & then lock it
+    token1
+        .mock_all_auths()
+        .approve(&proxy_wallet, &swap_pool.address, &i128::MAX, &9999);
+
+    // init swap
+    let operation_id = 1;
+    let swaps_chain = Vec::from_array(
+        &e,
+        [
+            (tokens1.clone(), pool_index1.clone(), tokens[1].clone()),
+            (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
+        ],
+    );
+    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+
+    assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::new(&e)
+    );
+    assert_eq!(swap_pool.get_destinations(&0), Vec::new(&e));
+
+    swap_pool
+        .mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &swap_pool.address,
+                fn_name: "add_request",
+                args: Vec::from_array(
+                    &e,
+                    [
+                        operator.to_val(),
+                        proxy_wallet.to_val(),
+                        tokens[2].clone().to_val(),
+                        BytesN::from_array(&e, &[0; 32]).into_val(&e),
+                        operation_id.into_val(&e),
+                        destination.to_val(),
+                        swap_amount.into_val(&e),
+                    ],
+                )
+                .into_val(&e),
+                sub_invokes: &[],
+            },
+        }])
+        .add_request(
+            &operator,
+            &proxy_wallet,
+            &tokens[2],
+            &BytesN::from_array(&e, &[0; 32]),
+            &operation_id,
+            &destination,
+            &swap_amount,
+        );
+
+    // check storage
+    assert_eq!(
+        swap_pool.get_requests(&destination),
+        Vec::from_array(
+            &e,
+            [(
+                BytesN::from_array(&e, &[0; 32]),
+                operation_id,
+                destination.clone(),
+                swap_amount - expected_fee_amount,
+                tokens[2].clone(),
+            ),]
+        )
+    );
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::new(&e)
+    );
+    assert_eq!(swap_pool.get_destinations_last_page(), 0);
+    assert_eq!(
+        swap_pool.get_destinations(&0),
+        vec![&e, destination.clone()]
+    );
+
+    let amount_out = swap_pool
+        .mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &swap_pool.address,
+                fn_name: "swap_chained_via_router",
+                args: Vec::from_array(
+                    &e,
+                    [
+                        operator.to_val(),
+                        destination.to_val(),
+                        operation_id.into_val(&e),
+                        swaps_chain.to_val(),
+                        (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
+                    ],
+                )
+                .into_val(&e),
+                sub_invokes: &[],
+            },
+        }])
+        .swap_chained_via_router(
+            &operator, &destination, &operation_id, &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+        );
+    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        e.auths(),
+        std::vec![(
+            operator.clone(),
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((
+                    swap_pool.address.clone(),
+                    Symbol::new(&e, "swap_chained_via_router"),
+                    Vec::from_array(
+                        &e,
+                        [
+                            operator.to_val(),
+                            destination.to_val(),
+                            operation_id.into_val(&e),
+                            swaps_chain.to_val(),
+                            (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
+                        ]
+                    )
+                )),
+                sub_invocations: std::vec![],
+            }
+        ),]
+    );
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(token1.balance(&destination), 0);
+    assert_eq!(token2.balance(&destination), 0);
+    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+
+    // check storage
+    assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
+    assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::from_array(
+            &e,
+            [(
+                BytesN::from_array(&e, &[0; 32]),
+                operation_id,
+                destination.clone(),
+                swap_amount - expected_fee_amount,
+                tokens[2].clone(),
+                (swap_amount - expected_fee_amount - pool_fee_amount * 2),
+            ),]
+        )
+    );
+    assert_eq!(swap_pool.get_destinations_last_page(), 0);
+    assert_eq!(
+        swap_pool.get_destinations(&0),
+        vec![&e, destination.clone()]
+    );
+}
+
+
+#[test]
+fn test_chained_swap_percent_fee_threshold() {
+    let e = Env::default();
+    e.budget().reset_unlimited();
+
+    let admin = Address::generate(&e);
+    let proxy_wallet = Address::generate(&e);
+    let operator = Address::generate(&e);
+    let destination = Address::generate(&e);
+    let min_fee = 1;
+    let max_fee = 100;
+    let percent_fee = 100;
+
+    let expected_fee_amount = 10;
+    let pool_fee_amount = 85;
+    let swap_amount = 1000;
+
+    let mut tokens = std::vec![
+        create_token_contract(&e, &admin).address,
+        create_token_contract(&e, &admin).address,
+        create_token_contract(&e, &admin).address
+    ];
+    tokens.sort();
+    let token1 = SorobanTokenClient::new(&e, &tokens[0]);
+    let token2 = SorobanTokenClient::new(&e, &tokens[1]);
+    let token3 = SorobanTokenClient::new(&e, &tokens[2]);
+    let token1_admin = SorobanTokenAdminClient::new(&e, &tokens[0]);
+    let token2_admin = SorobanTokenAdminClient::new(&e, &tokens[1]);
+    let token3_admin = SorobanTokenAdminClient::new(&e, &tokens[2]);
+
+    let tokens1 = Vec::from_array(&e, [tokens[0].clone(), tokens[1].clone()]);
+    let tokens2 = Vec::from_array(&e, [tokens[1].clone(), tokens[2].clone()]);
+
+    // init swap router with all it's complexity
+    let pool_hash = install_liq_pool_hash(&e);
+    let token_hash = install_token_wasm(&e);
+    let plane = deploy_plane_contract(&e);
+    let swap_router = deploy_swap_calculator_contract(&e);
+    swap_router.init_admin(&admin);
+    swap_router.mock_all_auths().set_pools_plane(&admin, &plane);
+    let router = deploy_liqpool_router_contract(&e);
+    router.mock_all_auths().init_admin(&admin);
+    router.mock_all_auths().set_pool_hash(&pool_hash);
+    router
+        .mock_all_auths()
+        .set_stableswap_pool_hash(&install_stableswap_liq_pool_hash(&e));
+    router.mock_all_auths().set_token_hash(&token_hash);
+    router.mock_all_auths().set_reward_token(&token1.address);
+    router.mock_all_auths().set_pools_plane(&admin, &plane);
+    router
+        .mock_all_auths()
+        .set_swap_router(&admin, &swap_router.address);
+
+    // init pools & deposit
+    let (pool_index1, _pool_address1) = router
+        .mock_all_auths()
+        .init_standard_pool(&admin, &tokens1, &30);
+    let (pool_index2, _pool_address2) = router
+        .mock_all_auths()
+        .init_standard_pool(&admin, &tokens2, &30);
+    token1_admin.mock_all_auths().mint(&admin, &10000);
+    token2_admin.mock_all_auths().mint(&admin, &20000);
+    token3_admin.mock_all_auths().mint(&admin, &10000);
+    router.mock_all_auths().deposit(
+        &admin,
+        &tokens1,
+        &pool_index1,
+        &Vec::from_array(&e, [10000, 10000]),
+        &0,
+    );
+    router.mock_all_auths().deposit(
+        &admin,
+        &tokens2,
+        &pool_index2,
+        &Vec::from_array(&e, [10000, 10000]),
+        &0,
+    );
+
+    // init current contract
+    let swap_pool = deploy_swap_pool(&e);
+    swap_pool.mock_all_auths().set_admin(&admin);
+    swap_pool.mock_all_auths().set_operator(&admin, &operator);
+    swap_pool
+        .mock_all_auths()
+        .set_swap_router(&admin, &router.address);
+    swap_pool.mock_all_auths().set_token_in(&admin, &tokens[0]);
+    swap_pool
+        .mock_all_auths()
+        .set_operational_fee(&operator, &min_fee, &max_fee, &percent_fee);
+
+    assert_eq!(token1.balance(&destination), 0);
+    assert_eq!(token2.balance(&destination), 0);
+    assert_eq!(token3.balance(&destination), 0);
+
+    // approve tokens for proxy wallet & then lock it
+    token1
+        .mock_all_auths()
+        .approve(&proxy_wallet, &swap_pool.address, &i128::MAX, &9999);
+
+    // init swap
+    let operation_id = 1;
+    let swaps_chain = Vec::from_array(
+        &e,
+        [
+            (tokens1.clone(), pool_index1.clone(), tokens[1].clone()),
+            (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
+        ],
+    );
+    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+
+    assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::new(&e)
+    );
+    assert_eq!(swap_pool.get_destinations(&0), Vec::new(&e));
+
+    swap_pool
+        .mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &swap_pool.address,
+                fn_name: "add_request",
+                args: Vec::from_array(
+                    &e,
+                    [
+                        operator.to_val(),
+                        proxy_wallet.to_val(),
+                        tokens[2].clone().to_val(),
+                        BytesN::from_array(&e, &[0; 32]).into_val(&e),
+                        operation_id.into_val(&e),
+                        destination.to_val(),
+                        swap_amount.into_val(&e),
+                    ],
+                )
+                .into_val(&e),
+                sub_invokes: &[],
+            },
+        }])
+        .add_request(
+            &operator,
+            &proxy_wallet,
+            &tokens[2],
+            &BytesN::from_array(&e, &[0; 32]),
+            &operation_id,
+            &destination,
+            &swap_amount,
+        );
+
+    // check storage
+    assert_eq!(
+        swap_pool.get_requests(&destination),
+        Vec::from_array(
+            &e,
+            [(
+                BytesN::from_array(&e, &[0; 32]),
+                operation_id,
+                destination.clone(),
+                swap_amount - expected_fee_amount,
+                tokens[2].clone(),
+            ),]
+        )
+    );
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::new(&e)
+    );
+    assert_eq!(swap_pool.get_destinations_last_page(), 0);
+    assert_eq!(
+        swap_pool.get_destinations(&0),
+        vec![&e, destination.clone()]
+    );
+
+    let amount_out = swap_pool
+        .mock_auths(&[MockAuth {
+            address: &operator,
+            invoke: &MockAuthInvoke {
+                contract: &swap_pool.address,
+                fn_name: "swap_chained_via_router",
+                args: Vec::from_array(
+                    &e,
+                    [
+                        operator.to_val(),
+                        destination.to_val(),
+                        operation_id.into_val(&e),
+                        swaps_chain.to_val(),
+                        (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
+                    ],
+                )
+                .into_val(&e),
+                sub_invokes: &[],
+            },
+        }])
+        .swap_chained_via_router(
+            &operator, &destination, &operation_id, &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+        );
+    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        e.auths(),
+        std::vec![(
+            operator.clone(),
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((
+                    swap_pool.address.clone(),
+                    Symbol::new(&e, "swap_chained_via_router"),
+                    Vec::from_array(
+                        &e,
+                        [
+                            operator.to_val(),
+                            destination.to_val(),
+                            operation_id.into_val(&e),
+                            swaps_chain.to_val(),
+                            (swap_amount - expected_fee_amount - pool_fee_amount * 2).into_val(&e),
+                        ]
+                    )
+                )),
+                sub_invocations: std::vec![],
+            }
+        ),]
+    );
+    assert_eq!(token1.balance(&operator), expected_fee_amount);
+    assert_eq!(token1.balance(&destination), 0);
+    assert_eq!(token2.balance(&destination), 0);
+    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+
+    // check storage
+    assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
+    assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
+    assert_eq!(
+        swap_pool.get_completed_requests(&destination, &0),
+        Vec::from_array(
+            &e,
+            [(
+                BytesN::from_array(&e, &[0; 32]),
+                operation_id,
+                destination.clone(),
+                swap_amount - expected_fee_amount,
+                tokens[2].clone(),
+                (swap_amount - expected_fee_amount - pool_fee_amount * 2),
+            ),]
+        )
+    );
+    assert_eq!(swap_pool.get_destinations_last_page(), 0);
+    assert_eq!(
+        swap_pool.get_destinations(&0),
+        vec![&e, destination.clone()]
+    );
 }

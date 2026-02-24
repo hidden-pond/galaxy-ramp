@@ -67,8 +67,17 @@ pub trait PoolContractInterface {
     fn get_destinations_last_page(e: Env) -> u32;
     fn get_destinations(e: Env, page: u32) -> Vec<Address>;
 
-    fn get_operational_fee(e: Env) -> i128;
-    fn set_operational_fee(e: Env, operator: Address, fee: i128);
+    fn get_operational_fee(e: &Env, amount: i128) -> i128;
+    fn get_min_operational_fee(e: Env) -> i128;
+    fn get_max_operational_fee(e: Env) -> i128;
+    fn get_percent_operational_fee(e: Env) -> i128;
+    fn set_operational_fee(
+        e: Env,
+        operator: Address,
+        min_fee: i128,
+        max_fee: i128,
+        percent: i128,
+    );
 }
 
 pub trait UpgradeableContract {

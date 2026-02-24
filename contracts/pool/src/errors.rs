@@ -11,4 +11,6 @@ pub enum PoolError {
     UnauthorizedOperator = 2302,
     OperationIdNotConsumed = 2303,
     FeeExceedSwapAmount = 2304,
+    InvalidFeeConfiguration = 2305,
+    InvalidFeePercentConfiguration = 2306,
 }

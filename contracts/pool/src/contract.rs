@@ -9,9 +9,10 @@ use crate::swap_router::swap_with_router;
 use crate::storage::{
     add_swap_request, cancel_swap_request, get_active_swap_requests, get_completed_swap_requests_last_page,
     get_completed_swap_requests_page, get_destinations, get_destinations_last_page,
-    get_operation_id_consumed, get_operational_fee, get_operator, get_swap_request_by_id,
-    get_swap_router, get_token_in, set_operational_fee, set_operator, set_swap_request_processed,
-    set_swap_router, set_token_in, SwapRequest,
+    get_operation_id_consumed, get_operator, get_swap_request_by_id,
+    get_swap_router, get_token_in, set_percent_operational_fee, set_operator, set_swap_request_processed,
+    set_swap_router, set_token_in, SwapRequest, set_min_operational_fee, set_max_operational_fee,
+    get_percent_operational_fee, get_min_operational_fee, get_max_operational_fee
 };
 
 #[contract]
@@ -79,7 +80,9 @@ impl PoolContractInterface for PoolContract {
             &amount_in,
         );
 
-        let operational_fee = get_operational_fee(&e);
+        let operational_fee = 
+
+        ::get_operational_fee(&e, amount_in);
 
         if operational_fee >= amount_in {
             panic_with_error!(&e, PoolError::FeeExceedSwapAmount);
@@ -283,24 +286,60 @@ impl PoolContractInterface for PoolContract {
         get_destinations(&e, page)
     }
 
-    fn get_operational_fee(e: Env) -> i128 {
-        get_operational_fee(&e)
+    fn get_operational_fee(e: &Env, amount: i128) -> i128 {
+        let min_amount = get_min_operational_fee(&e);
+        let max_amount = get_max_operational_fee(&e);
+        let percent = get_percent_operational_fee(&e);
+
+        let calculated = amount.checked_mul(percent)
+                                .and_then(|v| v.checked_div(10000))
+                                .unwrap_or(0);
+
+        if calculated < min_amount {
+            return min_amount;
+        } else if calculated > max_amount {
+            return max_amount;
+        } else {
+            return calculated;
+        }
     }
 
-    fn set_operational_fee(e: Env, operator: Address, fee: i128) {
+    fn get_min_operational_fee(e: Env) -> i128 {
+        get_min_operational_fee(&e)
+    }
+
+    fn get_max_operational_fee(e: Env) -> i128 {
+        get_max_operational_fee(&e)
+    }
+
+    fn get_percent_operational_fee(e: Env) -> i128 {
+        get_percent_operational_fee(&e)
+    }
+
+    fn set_operational_fee(e: Env, operator: Address, min_fee: i128, max_fee: i128, percent: i128) {
         operator.require_auth();
         if operator != get_operator(&e) {
             panic_with_error!(&e, PoolError::UnauthorizedOperator);
         }
 
-        set_operational_fee(&e, &fee);
+        if min_fee > max_fee {
+            panic_with_error!(&e, PoolError::InvalidFeeConfiguration);
+        }
+
+        if percent > 100 {
+            panic_with_error!(&e, PoolError::InvalidFeePercentConfiguration);
+        }
+
+        set_min_operational_fee(&e, &min_fee);
+        set_max_operational_fee(&e, &max_fee);
+        set_percent_operational_fee(&e, &percent);
     }
 }
 
 #[contractimpl]
 impl UpgradeableContract for PoolContract {
     fn version() -> u32 {
-        104
+        105
     }
 
     fn upgrade(e: Env, new_wasm_hash: BytesN<32>) {
