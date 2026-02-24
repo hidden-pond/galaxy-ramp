@@ -80,9 +80,7 @@ impl PoolContractInterface for PoolContract {
             &amount_in,
         );
 
-        let operational_fee = 
-
-        ::get_operational_fee(&e, amount_in);
+        let operational_fee = Self::get_operational_fee(&e, amount_in);
 
         if operational_fee >= amount_in {
             panic_with_error!(&e, PoolError::FeeExceedSwapAmount);
