@@ -163,7 +163,9 @@ fn test_chained_swap() {
             (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
         ],
     );
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+    token1_admin
+        .mock_all_auths()
+        .mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -251,10 +253,16 @@ fn test_chained_swap() {
             },
         }])
         .swap_chained_via_router(
-            &operator, &destination, &operation_id, &swaps_chain,
-            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+            &operator,
+            &destination,
+            &operation_id,
+            &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2),
         );
-    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        amount_out,
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
     assert_eq!(
         e.auths(),
         std::vec![(
@@ -280,7 +288,10 @@ fn test_chained_swap() {
     );
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
-    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        token3.balance(&destination),
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
 
     // check storage
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
@@ -396,8 +407,11 @@ fn test_duplicate_destination() {
         &swap_amount,
     );
     swap_pool.swap_chained_via_router(
-        &operator, &destination, &operation_id, &swaps_chain,
-        &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+        &operator,
+        &destination,
+        &operation_id,
+        &swaps_chain,
+        &(swap_amount - expected_fee_amount - pool_fee_amount * 2),
     );
 
     operation_id += 1;
@@ -411,8 +425,11 @@ fn test_duplicate_destination() {
         &swap_amount,
     );
     swap_pool.swap_chained_via_router(
-        &operator, &destination, &operation_id, &swaps_chain,
-        &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+        &operator,
+        &destination,
+        &operation_id,
+        &swaps_chain,
+        &(swap_amount - expected_fee_amount - pool_fee_amount * 2),
     );
 
     // check storage
@@ -423,7 +440,6 @@ fn test_duplicate_destination() {
     );
 }
 
-
 #[test]
 fn test_request_cancel() {
     let e = Env::default();
@@ -433,7 +449,7 @@ fn test_request_cancel() {
     let proxy_wallet = Address::generate(&e);
     let operator = Address::generate(&e);
     let destination = Address::generate(&e);
-    
+
     let min_fee = 50;
     let max_fee = 150;
     let percent_fee = 100;
@@ -526,7 +542,9 @@ fn test_request_cancel() {
     // init swap
     let operation_id = 1;
 
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+    token1_admin
+        .mock_all_auths()
+        .mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -612,13 +630,11 @@ fn test_request_cancel() {
                 sub_invokes: &[],
             },
         }])
-        .cancel_request(
-            &operator,
-            &proxy_wallet,
-            &operation_id,
-            &destination,
-        );
-    assert_eq!(token1.balance(&proxy_wallet), swap_amount - expected_fee_amount);
+        .cancel_request(&operator, &proxy_wallet, &operation_id, &destination);
+    assert_eq!(
+        token1.balance(&proxy_wallet),
+        swap_amount - expected_fee_amount
+    );
     assert_eq!(token2.balance(&destination), 0);
     assert_eq!(token3.balance(&destination), 0);
 
@@ -627,9 +643,7 @@ fn test_request_cancel() {
     assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
     assert_eq!(
         swap_pool.get_completed_requests(&destination, &0),
-        Vec::from_array(
-            &e, []
-        )
+        Vec::from_array(&e, [])
     );
     assert_eq!(swap_pool.get_destinations_last_page(), 0);
     assert_eq!(
@@ -740,7 +754,9 @@ fn test_request_terminate() {
     // init swap
     let operation_id = 1;
 
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+    token1_admin
+        .mock_all_auths()
+        .mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -807,7 +823,10 @@ fn test_request_terminate() {
         vec![&e, destination.clone()]
     );
 
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
+    assert_eq!(
+        token1.balance(&swap_pool.address),
+        swap_amount - expected_fee_amount
+    );
     swap_pool
         .mock_auths(&[MockAuth {
             address: &operator,
@@ -826,14 +845,13 @@ fn test_request_terminate() {
                 sub_invokes: &[],
             },
         }])
-        .terminate_request(
-            &operator,
-            &operation_id,
-            &destination,
-        );
+        .terminate_request(&operator, &operation_id, &destination);
     assert_eq!(token1.balance(&proxy_wallet), 0);
     assert_eq!(token1.balance(&operator), expected_fee_amount);
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
+    assert_eq!(
+        token1.balance(&swap_pool.address),
+        swap_amount - expected_fee_amount
+    );
     assert_eq!(token2.balance(&destination), 0);
     assert_eq!(token3.balance(&destination), 0);
 
@@ -842,9 +860,7 @@ fn test_request_terminate() {
     assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
     assert_eq!(
         swap_pool.get_completed_requests(&destination, &0),
-        Vec::from_array(
-            &e, []
-        )
+        Vec::from_array(&e, [])
     );
     assert_eq!(swap_pool.get_destinations_last_page(), 0);
     assert_eq!(
@@ -852,7 +868,6 @@ fn test_request_terminate() {
         vec![&e, destination.clone()]
     );
 }
-
 
 #[test]
 fn test_request_terminate_and_withdraw() {
@@ -955,7 +970,9 @@ fn test_request_terminate_and_withdraw() {
     // init swap
     let operation_id = 1;
 
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+    token1_admin
+        .mock_all_auths()
+        .mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -1022,7 +1039,10 @@ fn test_request_terminate_and_withdraw() {
         vec![&e, destination.clone()]
     );
 
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
+    assert_eq!(
+        token1.balance(&swap_pool.address),
+        swap_amount - expected_fee_amount
+    );
     swap_pool
         .mock_auths(&[MockAuth {
             address: &operator,
@@ -1041,14 +1061,13 @@ fn test_request_terminate_and_withdraw() {
                 sub_invokes: &[],
             },
         }])
-        .terminate_request(
-            &operator,
-            &operation_id,
-            &destination,
-        );
+        .terminate_request(&operator, &operation_id, &destination);
     assert_eq!(token1.balance(&proxy_wallet), 0);
     assert_eq!(token1.balance(&operator), expected_fee_amount);
-    assert_eq!(token1.balance(&swap_pool.address), swap_amount - expected_fee_amount);
+    assert_eq!(
+        token1.balance(&swap_pool.address),
+        swap_amount - expected_fee_amount
+    );
     assert_eq!(token2.balance(&destination), 0);
     assert_eq!(token3.balance(&destination), 0);
 
@@ -1057,9 +1076,7 @@ fn test_request_terminate_and_withdraw() {
     assert_eq!(swap_pool.get_completed_requests_last_page(&destination), 0);
     assert_eq!(
         swap_pool.get_completed_requests(&destination, &0),
-        Vec::from_array(
-            &e, []
-        )
+        Vec::from_array(&e, [])
     );
     assert_eq!(swap_pool.get_destinations_last_page(), 0);
     assert_eq!(
@@ -1092,7 +1109,10 @@ fn test_request_terminate_and_withdraw() {
             &token1.address,
             &(swap_amount - expected_fee_amount),
         );
-    assert_eq!(token1.balance(&destination), swap_amount - expected_fee_amount);
+    assert_eq!(
+        token1.balance(&destination),
+        swap_amount - expected_fee_amount
+    );
     assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(token1.balance(&swap_pool.address), 0);
     assert_eq!(token2.balance(&destination), 0);
@@ -1207,7 +1227,9 @@ fn test_chained_swap_max_fee_threshold() {
             (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
         ],
     );
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+    token1_admin
+        .mock_all_auths()
+        .mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -1295,10 +1317,16 @@ fn test_chained_swap_max_fee_threshold() {
             },
         }])
         .swap_chained_via_router(
-            &operator, &destination, &operation_id, &swaps_chain,
-            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+            &operator,
+            &destination,
+            &operation_id,
+            &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2),
         );
-    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        amount_out,
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
     assert_eq!(
         e.auths(),
         std::vec![(
@@ -1325,7 +1353,10 @@ fn test_chained_swap_max_fee_threshold() {
     assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
-    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        token3.balance(&destination),
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
 
     // check storage
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
@@ -1459,7 +1490,9 @@ fn test_chained_swap_min_fee_threshold() {
             (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
         ],
     );
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+    token1_admin
+        .mock_all_auths()
+        .mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -1547,10 +1580,16 @@ fn test_chained_swap_min_fee_threshold() {
             },
         }])
         .swap_chained_via_router(
-            &operator, &destination, &operation_id, &swaps_chain,
-            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+            &operator,
+            &destination,
+            &operation_id,
+            &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2),
         );
-    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        amount_out,
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
     assert_eq!(
         e.auths(),
         std::vec![(
@@ -1577,7 +1616,10 @@ fn test_chained_swap_min_fee_threshold() {
     assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
-    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        token3.balance(&destination),
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
 
     // check storage
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
@@ -1602,7 +1644,6 @@ fn test_chained_swap_min_fee_threshold() {
         vec![&e, destination.clone()]
     );
 }
-
 
 #[test]
 fn test_chained_swap_percent_fee_threshold() {
@@ -1712,7 +1753,9 @@ fn test_chained_swap_percent_fee_threshold() {
             (tokens2.clone(), pool_index2.clone(), tokens[2].clone()),
         ],
     );
-    token1_admin.mock_all_auths().mint(&proxy_wallet, &swap_amount);
+    token1_admin
+        .mock_all_auths()
+        .mint(&proxy_wallet, &swap_amount);
 
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));
     assert_eq!(
@@ -1800,10 +1843,16 @@ fn test_chained_swap_percent_fee_threshold() {
             },
         }])
         .swap_chained_via_router(
-            &operator, &destination, &operation_id, &swaps_chain,
-            &(swap_amount - expected_fee_amount - pool_fee_amount * 2)
+            &operator,
+            &destination,
+            &operation_id,
+            &swaps_chain,
+            &(swap_amount - expected_fee_amount - pool_fee_amount * 2),
         );
-    assert_eq!(amount_out, (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        amount_out,
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
     assert_eq!(
         e.auths(),
         std::vec![(
@@ -1830,7 +1879,10 @@ fn test_chained_swap_percent_fee_threshold() {
     assert_eq!(token1.balance(&operator), expected_fee_amount);
     assert_eq!(token1.balance(&destination), 0);
     assert_eq!(token2.balance(&destination), 0);
-    assert_eq!(token3.balance(&destination), (swap_amount - expected_fee_amount - pool_fee_amount * 2));
+    assert_eq!(
+        token3.balance(&destination),
+        (swap_amount - expected_fee_amount - pool_fee_amount * 2)
+    );
 
     // check storage
     assert_eq!(swap_pool.get_requests(&destination), Vec::new(&e));

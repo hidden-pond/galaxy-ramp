@@ -9,7 +9,6 @@ use utils::{
     generate_instance_storage_getter_with_default, generate_instance_storage_setter,
 };
 
-
 #[derive(Clone)]
 #[contracttype]
 enum DataKey {

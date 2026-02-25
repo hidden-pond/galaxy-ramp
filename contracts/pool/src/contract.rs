@@ -1,18 +1,19 @@
+use access_control::access::{AccessControl, AccessControlTrait};
 use soroban_sdk::token::TokenClient as SorobanTokenClient;
 use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, Vec};
-use access_control::access::{AccessControl, AccessControlTrait};
 
 use crate::errors::PoolError;
 use crate::interfaces::{PoolContractInterface, UpgradeableContract};
 use crate::swap_router::swap_with_router;
 
 use crate::storage::{
-    add_swap_request, cancel_swap_request, get_active_swap_requests, get_completed_swap_requests_last_page,
-    get_completed_swap_requests_page, get_destinations, get_destinations_last_page,
-    get_operation_id_consumed, get_operator, get_swap_request_by_id,
-    get_swap_router, get_token_in, set_percent_operational_fee, set_operator, set_swap_request_processed,
-    set_swap_router, set_token_in, SwapRequest, set_min_operational_fee, set_max_operational_fee,
-    get_percent_operational_fee, get_min_operational_fee, get_max_operational_fee
+    add_swap_request, cancel_swap_request, get_active_swap_requests,
+    get_completed_swap_requests_last_page, get_completed_swap_requests_page, get_destinations,
+    get_destinations_last_page, get_max_operational_fee, get_min_operational_fee,
+    get_operation_id_consumed, get_operator, get_percent_operational_fee, get_swap_request_by_id,
+    get_swap_router, get_token_in, set_max_operational_fee, set_min_operational_fee, set_operator,
+    set_percent_operational_fee, set_swap_request_processed, set_swap_router, set_token_in,
+    SwapRequest,
 };
 
 #[contract]
@@ -119,8 +120,7 @@ impl PoolContractInterface for PoolContract {
         }
 
         // return money to proxy wallet
-        SorobanTokenClient::new(&e, &
-            token).transfer(
+        SorobanTokenClient::new(&e, &token).transfer(
             &e.current_contract_address(),
             &destination,
             &amount,
@@ -154,21 +154,12 @@ impl PoolContractInterface for PoolContract {
             &swap_request.amount_in,
         );
 
-        cancel_swap_request(
-            &e,
-            &destination,
-            &swap_request,
-        );
+        cancel_swap_request(&e, &destination, &swap_request);
 
         // todo: emit event
     }
 
-    fn terminate_request(
-        e: Env,
-        operator: Address,
-        op_id: u128,
-        destination: Address,
-    ) {
+    fn terminate_request(e: Env, operator: Address, op_id: u128, destination: Address) {
         // check operator is whitelisted
         operator.require_auth();
         if operator != get_operator(&e) {
@@ -182,11 +173,7 @@ impl PoolContractInterface for PoolContract {
 
         let swap_request = get_swap_request_by_id(&e, &destination, op_id);
 
-        cancel_swap_request(
-            &e,
-            &destination,
-            &swap_request,
-        );
+        cancel_swap_request(&e, &destination, &swap_request);
 
         // todo: emit event
     }
@@ -289,9 +276,10 @@ impl PoolContractInterface for PoolContract {
         let max_amount = get_max_operational_fee(&e);
         let percent = get_percent_operational_fee(&e);
 
-        let calculated = amount.checked_mul(percent)
-                                .and_then(|v| v.checked_div(10000))
-                                .unwrap_or(0);
+        let calculated = amount
+            .checked_mul(percent)
+            .and_then(|v| v.checked_div(10000))
+            .unwrap_or(0);
 
         if calculated < min_amount {
             return min_amount;

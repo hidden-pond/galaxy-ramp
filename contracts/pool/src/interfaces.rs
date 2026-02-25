@@ -27,12 +27,7 @@ pub trait PoolContractInterface {
         destination: Address,
     );
 
-    fn terminate_request(
-        e: Env,
-        operator: Address,
-        op_id: u128,
-        destination: Address,
-    );
+    fn terminate_request(e: Env, operator: Address, op_id: u128, destination: Address);
 
     fn withdraw_token(
         e: Env,
@@ -71,13 +66,7 @@ pub trait PoolContractInterface {
     fn get_min_operational_fee(e: Env) -> i128;
     fn get_max_operational_fee(e: Env) -> i128;
     fn get_percent_operational_fee(e: Env) -> i128;
-    fn set_operational_fee(
-        e: Env,
-        operator: Address,
-        min_fee: i128,
-        max_fee: i128,
-        percent: i128,
-    );
+    fn set_operational_fee(e: Env, operator: Address, min_fee: i128, max_fee: i128, percent: i128);
 }
 
 pub trait UpgradeableContract {
